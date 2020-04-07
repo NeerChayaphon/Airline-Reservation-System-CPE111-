@@ -1,0 +1,30 @@
+# Makefile for demo programs for Lecture 9 - Networks
+# We also need a queue and a min priority queue for this lecture
+# Modified 14 March 2020 to add simpleNetwork demo/lab
+
+ifeq ($(OSTYPE),WINDOWS)
+	EXECEXT =.exe
+	COMP	=__MINGCC__
+	PLATFORM	=mingw
+else
+	EXECEXT =
+	COMP	=__GCC__
+	PLATFORM	=linux
+endif
+
+EXECUTABLES= simpleNetwork$(EXECEXT) 
+
+all : $(EXECUTABLES)
+
+minPriorityQueue.o :	minPriorityQueue.c minPriorityQueue.h
+	gcc -c minPriorityQueue.c
+
+simpleNetwork.o :	simpleNetwork.c minPriorityQueue.h
+	gcc -c simpleNetwork.c
+
+simpleNetwork$(EXECEXT) : simpleNetwork.o minPriorityQueue.o
+	gcc -o simpleNetwork$(EXECEXT) simpleNetwork.o minPriorityQueue.o
+
+clean : 
+	-rm *.o
+	-rm $(EXECUTABLES) 

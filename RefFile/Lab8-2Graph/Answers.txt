@@ -1,0 +1,18 @@
+Answers to Questions in Lab 8-1
+===============================
+
+Left (undirected) Graph
+
+Is E reachable from F?  NO
+Is C reachable from A?  YES
+Is G reachable from A?  NO
+Is G reachable from F?  YES
+Is C reachable from C?  YES
+
+Right (directed) Graph
+
+Is E reachable from F?  YES
+Is C reachable from A?  NO
+Is G reachable from A?  YES
+Is G reachable from F?  YES
+Is C reachable from C?  YES

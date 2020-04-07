@@ -1,0 +1,19 @@
+Find shortest paths using Dijstra's algorithm
+Enter key for starting vertex (negative to stop): 666
+Enter key for ending vertex: 777
+Min total weight of shortest path: 16
+Path: 
+'666'  ==> '444'  ==> '111'  ==> '222'  ==> '555'  ==> '777' 
+Enter key for starting vertex (negative to stop): 222
+Enter key for ending vertex: 444
+Vertex '444' is not reachable from vertex '222'
+Enter key for starting vertex (negative to stop): 555
+Enter key for ending vertex: 222
+Min total weight of shortest path: 17
+Path: 
+'555'  ==> '777'  ==> '111'  ==> '222' 
+Enter key for starting vertex (negative to stop): 777
+Enter key for ending vertex: 555
+Min total weight of shortest path: 12
+Path: 
+'777'  ==> '555' 

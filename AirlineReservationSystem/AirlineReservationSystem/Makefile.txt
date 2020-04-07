@@ -1,0 +1,28 @@
+# Makefile for Airline Reservation system
+
+ifeq ($(OSTYPE),WINDOWS)
+	EXECEXT =.exe
+	COMP	=__MINGCC__
+	PLATFORM	=mingw
+else
+	EXECEXT =
+	COMP	=__GCC__
+	PLATFORM	=linux
+endif
+
+EXECUTABLES= main$(EXECEXT)
+
+all : $(EXECUTABLES)
+
+flightNetwork.o :	flightNetwork.c abstractNetwork.h abstractQueue.h
+	gcc -c flightNetwork.c
+    
+main.o :	main.c flightNetwork.c
+	gcc -c main.c
+
+main$(EXECEXT) : main.o flightNetwork.o
+	gcc -o main$(EXECEXT) main.o flightNetwork.o
+    
+clean : 
+	-rm *.o
+	-rm $(EXECUTABLES) 
