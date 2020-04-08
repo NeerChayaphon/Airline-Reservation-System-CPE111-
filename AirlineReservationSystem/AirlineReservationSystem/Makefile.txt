@@ -1,4 +1,6 @@
-# Makefile for Airline Reservation system
+# Makefile for demo programs for Lecture 8
+# Networks
+# We also need a queue and a min priority queue for this lecture
 
 ifeq ($(OSTYPE),WINDOWS)
 	EXECEXT =.exe
@@ -14,15 +16,27 @@ EXECUTABLES= main$(EXECEXT)
 
 all : $(EXECUTABLES)
 
+linkedListQueue.o :	linkedListQueue.c abstractQueue.h
+	gcc -c linkedListQueue.c
+
+minPriorityQueue.o :	minPriorityQueue.c minPriorityQueue.h
+	gcc -c minPriorityQueue.c
+
 flightNetwork.o :	flightNetwork.c abstractNetwork.h abstractQueue.h
 	gcc -c flightNetwork.c
-    
-main.o :	main.c flightNetwork.c
+
+main.o :	main.c abstractNetwork.h networkBuilder.h
 	gcc -c main.c
 
-main$(EXECEXT) : main.o flightNetwork.o
-	gcc -o main$(EXECEXT) main.o flightNetwork.o
-    
+networkBuilder.o :	networkBuilder.c abstractNetwork.h networkBuilder.h
+	gcc -c networkBuilder.c
+
+
+main$(EXECEXT) : main.o flightNetwork.o linkedListQueue.o networkBuilder.o minPriorityQueue.o
+	gcc -o main$(EXECEXT) main.o flightNetwork.o \
+              linkedListQueue.o networkBuilder.o minPriorityQueue.o
+
+
 clean : 
 	-rm *.o
 	-rm $(EXECUTABLES) 

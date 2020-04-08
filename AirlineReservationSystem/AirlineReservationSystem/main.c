@@ -7,9 +7,10 @@
 //
 
 #include <stdio.h>
-#include "flightNetwork.h"
+#include "networkBuilder.h"
+#include "abstractNetwork.h"
 
 int main(int argc, const char * argv[])
 {
-    buildNetwork();
+    readNetworkDefinition("flightInput.txt",1);
 }

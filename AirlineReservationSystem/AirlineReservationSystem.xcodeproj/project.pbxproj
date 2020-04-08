@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C51ACA1243E1609003604BC /* networkBuilder.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C51ACA0243E1609003604BC /* networkBuilder.c */; };
+		4C51ACA4243E2842003604BC /* minPriorityQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C51ACA2243E2842003604BC /* minPriorityQueue.c */; };
+		4C51ACA6243E2848003604BC /* linkedListQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C51ACA5243E2848003604BC /* linkedListQueue.c */; };
 		4CFBE7C52438C9E60033BE99 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 4CFBE7C42438C9E60033BE99 /* main.c */; };
 		4CFBE7CD2438CA470033BE99 /* flightNetwork.c in Sources */ = {isa = PBXBuildFile; fileRef = 4CFBE7CC2438CA470033BE99 /* flightNetwork.c */; };
 /* End PBXBuildFile section */
@@ -26,6 +29,11 @@
 /* Begin PBXFileReference section */
 		4C4B090B243C245E007BC2B4 /* abstractNetwork.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = abstractNetwork.h; sourceTree = "<group>"; };
 		4C4B090C243C245E007BC2B4 /* abstractQueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = abstractQueue.h; sourceTree = "<group>"; };
+		4C51AC9F243E1609003604BC /* networkBuilder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = networkBuilder.h; sourceTree = "<group>"; };
+		4C51ACA0243E1609003604BC /* networkBuilder.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = networkBuilder.c; sourceTree = "<group>"; };
+		4C51ACA2243E2842003604BC /* minPriorityQueue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = minPriorityQueue.c; sourceTree = "<group>"; };
+		4C51ACA3243E2842003604BC /* minPriorityQueue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = minPriorityQueue.h; sourceTree = "<group>"; };
+		4C51ACA5243E2848003604BC /* linkedListQueue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = linkedListQueue.c; sourceTree = "<group>"; };
 		4CE1FF69243B335A00220BF2 /* Makefile.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Makefile.txt; sourceTree = "<group>"; };
 		4CFBE7C12438C9E60033BE99 /* AirlineReservationSystem */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AirlineReservationSystem; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CFBE7C42438C9E60033BE99 /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
@@ -66,9 +74,14 @@
 				4CFBE7C42438C9E60033BE99 /* main.c */,
 				4CFBE7CB2438CA470033BE99 /* flightNetwork.h */,
 				4CFBE7CC2438CA470033BE99 /* flightNetwork.c */,
-				4CE1FF69243B335A00220BF2 /* Makefile.txt */,
+				4C51AC9F243E1609003604BC /* networkBuilder.h */,
+				4C51ACA0243E1609003604BC /* networkBuilder.c */,
 				4C4B090B243C245E007BC2B4 /* abstractNetwork.h */,
 				4C4B090C243C245E007BC2B4 /* abstractQueue.h */,
+				4C51ACA2243E2842003604BC /* minPriorityQueue.c */,
+				4C51ACA3243E2842003604BC /* minPriorityQueue.h */,
+				4C51ACA5243E2848003604BC /* linkedListQueue.c */,
+				4CE1FF69243B335A00220BF2 /* Makefile.txt */,
 			);
 			path = AirlineReservationSystem;
 			sourceTree = "<group>";
@@ -131,7 +144,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				4CFBE7CD2438CA470033BE99 /* flightNetwork.c in Sources */,
+				4C51ACA1243E1609003604BC /* networkBuilder.c in Sources */,
+				4C51ACA4243E2842003604BC /* minPriorityQueue.c in Sources */,
 				4CFBE7C52438C9E60033BE99 /* main.c in Sources */,
+				4C51ACA6243E2848003604BC /* linkedListQueue.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

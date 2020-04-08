@@ -1,15 +1,22 @@
 /*
- *  matrixGraph.c
+ *  linkedListNetwork.c
  *
- *  Implements an abstractGraph using an adjacency matrix.
+ *  Implements an abstractNetwork using adjacency lists (linked lists).
+ *  This is a structure with two levels of list. There is a master
+ *  list of vertices, linked in series. Each vertex points to a subsidiary
+ *  linked list with references to all the other vertices to which it
+ *  is connected.
+ *
+ *  Each vertex has an integer weight and a pointer to a parent vertex
+ *  which can be used for route finding and spanning tree algorithms
  *
  *  Key values are strings and are copied when vertices are inserted into
  *  the graph. Every vertex has a void* pointer to ancillary data which
  *  is simply stored.
  *
- *  Created by Sally Goldin, 12 March 2015 for CPE 113
- *  Solution to Lab 8-2
- *  Modified 9 March 2016 to remove edges when we remove a vertex
+ *  Created by Sally Goldin, 1 February 2012 for CPE 113
+ *  Modified 18 March 2013 to improve naming.
+ *  Modified 15 March 2016 to add functions for Lab 9-2 (networkWriter)
  */
 
 #include <stdio.h>
@@ -17,185 +24,283 @@
 #include <string.h>
 #include "abstractNetwork.h"
 #include "abstractQueue.h"
+#include "minPriorityQueue.h"
 
 #define WHITE 0
 #define GRAY  1
 #define BLACK 2
 
+
 char* colorName[] = {"WHITE", "GRAY", "BLACK"};
 
+/* List items for the adjacency list.
+ * Each one is a reference to an existing vertex
+ */
+typedef struct _adjacent
+{
+    void * pVertex;           /* pointer to the VERTEX_T this
+                               * item refers to.
+                               */
+    unsigned int weight;      /* weight of this edge */
+    struct _adjacent * next;  /* next item in the ajacency list */
+} ADJACENT_T;
 
-/* Structure for the main vertex list.*/
+/* List items for the main vertex list.*/
 typedef struct _vertex
 {
     char * key;               /* key for this vertex */
     void * data;              /* ancillary data for this vertex */
-    int index;                /* array index. Makes using the queue easier */
     int color;                /* used to mark nodes as visited */
-    int dValue;               /* total weight so far, for Dijkstra's algo */
+    int dValue;               /* sum of weights for shortest path so far to this vertex */
+    struct _vertex * parent;  /* pointer to parent found in Dijkstra's algorithm */
+    struct _vertex * next;    /* next vertex in the list */
+    ADJACENT_T * adjacentHead;    /* pointer to the head of the
+                       * adjacent vertices list
+                               */
+    ADJACENT_T * adjacentTail;    /* pointer to the tail of the
+                   * adjacent vertices list
+                               */
 }  VERTEX_T;
 
-VERTEX_T * vertices = NULL;   /* array of vertices. Will be allocated
-                   * in initGraph based on maximum passed in.
-                               */
-int ** edges = NULL;          /* matrix (2D array) of edges. Will
-                               * be allocated in initGraph     */
-int maxVertices = 0;          /* set by initGraph */
+
+VERTEX_T * vListHead = NULL;  /* head of the vertex list */
+VERTEX_T * vListTail = NULL;  /* tail of the vertex list */
 int bGraphDirected = 0;       /* if true, this is a directed graph */
-int vertexCount = 0;          /* keep track of the number of vertices */
-                              /* updated in addVertex and removeVertex */
-int lastIndex = -1;          /* last item in array that is in use */
-                              /* could be > than vertexCount if we have
-                   * removed some vertices
-                               */
+int maxGraphVertices = 0;     /* not used for linked list implementation */
+                              /* but needed for networkWriter */
+VERTEX_T* currentVertex = NULL;  /* used to iterate through the vertex list */
+
 /** Private functions */
 
 /* Finds the vertex that holds the passed key
  * (if any) and returns a pointer to that vertex.
  * Arguments
  *       key    -  Key we are looking for
- * Returns index of vertex in the vertices array, or -1
- * if not found.
+ *       pPred  -  used to return the predecessor if any
+ * Returns pointer to the vertex structure if one is found
  */
-int findVertexByKey(char* key)
+VERTEX_T * findVertexByKey(char* key, VERTEX_T** pPred)
 {
-    int found = -1;
-    int i = 0;
-    /* loop through the array looking for the one we wnat */
-    for (i=0; (i <= lastIndex) && (found < 0); i++)
+    VERTEX_T * pFoundVtx = NULL;
+    VERTEX_T * pCurVertex = vListHead;
+    *pPred = NULL;
+    /* while there are vertices left and we haven't found
+     * the one we want.
+     */
+    while ((pCurVertex != NULL) && (pFoundVtx == NULL))
        {
-       if ((vertices[i].key != NULL) && (strcmp(vertices[i].key,key) == 0))
+       if (strcmp(pCurVertex->key,key) == 0)
           {
-      found = i;
+      pFoundVtx = pCurVertex;
       }
+       else
+          {
+      *pPred = pCurVertex;
+          pCurVertex = pCurVertex->next;
+          }
        }
-    return found;
+    return pFoundVtx;
 }
 
-/* Finds the first unused slot in the vertices array.
- * This may be a slot make available by a 'remove', or
- * the slot after the current 'lastIndex'
- * Returns the first available index or -1 if array is full.
- * Updates lastIndex as a side effect if it returns lastIndex+1
+/* Free the adjacencyList for a vertex
+ * Argument
+ *   pVertex    - vertex whose edges we want to delete
  */
-int findFirstUnused()
+void freeAdjacencyList(VERTEX_T *pVertex)
 {
-    int i = 0;
-    int returnidx = -1;
-    if (vertexCount < maxVertices)
+   ADJACENT_T * pCurRef = pVertex->adjacentHead;
+   while (pCurRef != NULL)
       {
-      for (i=0; i <= lastIndex; i++)
-     {
-     if (vertices[i].key == NULL)
-        {
-        returnidx = i;
-            break;
-            }
-         }
-      if (returnidx == -1) /* no slots in the middle of the array */
-     {
-     lastIndex++;
-         returnidx = lastIndex;
-         }
+      ADJACENT_T * pDelRef = pCurRef;
+      pCurRef = pCurRef->next;
+      free(pDelRef);
       }
-    return returnidx;
+   pVertex->adjacentHead = NULL;
+   pVertex->adjacentTail = NULL;
+}
+
+/* Check if there is already an edge between
+ * two vertices. We do not want to add a duplicate.
+ * Arguments
+ *   pFrom        -  Start point of edge
+ *   pTo          -  End point of edge
+ * Return 1 if an edge already exists, 0 if it does
+ * not.
+ */
+int edgeExists(VERTEX_T* pFrom, VERTEX_T* pTo)
+{
+    int bEdgeExists = 0;
+    ADJACENT_T * pCurRef = pFrom->adjacentHead;
+    while ((pCurRef != NULL) && (!bEdgeExists))
+       {
+       if (pCurRef->pVertex == pTo)
+          {
+      bEdgeExists = 1;  /* the 'To' vertex is already in the
+                             * 'From' vertex's adjacency list */
+          }
+       else
+          {
+      pCurRef = pCurRef->next;
+          }
+       }
+    return bEdgeExists;
+}
+
+/* Component of removeVertex. Removes all references
+ * to this vertex as the end point of edges in other
+ * vertices' adjacency lists.
+ */
+void removeReferences(VERTEX_T * pTarget)
+{
+   VERTEX_T * pCurrentVtx = vListHead;
+   while (pCurrentVtx != NULL)
+      {
+      if (pCurrentVtx != pTarget)
+         {
+     /* skip the target vertex */
+     ADJACENT_T* pAdjacent = pCurrentVtx->adjacentHead;
+     ADJACENT_T* pPrevAdjacent = NULL;
+     while (pAdjacent != NULL)
+        {
+        if (pAdjacent->pVertex == pTarget)  /* if this edge involves the target*/
+           {
+           if (pPrevAdjacent != NULL)
+              {
+          pPrevAdjacent->next = pAdjacent->next;
+              }
+               else
+              {
+          pCurrentVtx->adjacentHead = pAdjacent->next;
+              }
+               if (pAdjacent == pCurrentVtx->adjacentTail)
+              {
+          pCurrentVtx->adjacentTail = NULL;
+          }
+               free(pAdjacent);
+               pAdjacent = NULL;
+           break;    /* can only show up once in the adjacency list*/
+           }
+            else
+           {
+           pPrevAdjacent = pAdjacent;
+               pAdjacent = pAdjacent->next;
+           }
+        }
+     }
+      pCurrentVtx = pCurrentVtx->next;
+      }
 }
 
 /* Count adjacent vertices to a vertex.
  * Argument
- *    whichVertex   -   Index of vertex whose adjacent nodes we want to count
+ *    pVertex   -   Vertex whose adjacent nodes we want to count
  * Returns integer value for count (could be zero)
  */
-/*int countAdjacent(int whichVertex)
+int countAdjacent(VERTEX_T * pVertex)
 {
     int count = 0;
-    int i = 0;
-    for (i = 0; i <= lastIndex; i++)
+    ADJACENT_T * pAdjacent = pVertex->adjacentHead;
+    while (pAdjacent != NULL)
        {
-       if ((vertices[i].key != NULL) && (edges[whichVertex][i] > 0))
-           count += 1;
+       count += 1;
+       pAdjacent = pAdjacent->next;
        }
     return count;
-}*/
+}
 
-/* Set all vertices to the passed color.
+/* Color all vertices to the passed color.
  * Argument
  *    A color constant
- * 12 Mar 2015 Also set pFrom to NULL
  */
 void colorAll(int color)
 {
-    int i = 0;
-    for (i = 0; i <= lastIndex; i++)
+    VERTEX_T* pVertex = vListHead;
+    while (pVertex != NULL)
        {
-       vertices[i].color = color;
+       pVertex->color = color;
+       pVertex = pVertex->next;
        }
 }
+
+/* Initialize the dValue and parent for all
+ * vertices. dValue should be very big, parent
+ * will be set to NULL. Also add to the minPriority queue.
+ */
+void initAll()
+{
+    VERTEX_T* pVertex = vListHead;
+    while (pVertex != NULL)
+       {
+       pVertex->dValue = 999999999;
+       pVertex->parent = NULL;
+       enqueueMin(pVertex);
+       pVertex = pVertex->next;
+       }
+}
+
 
 /* Execute a breadth first search from a vertex,
  * calling the function (*vFunction) on each vertex
  * as we visit it and color it black.
  * Arguments
- *    vIndex  - Index of the starting vertex
+ *    pVertex    -  starting vertex for traversal
  */
-void traverseBreadthFirst(int vIndex, void (*vFunction)(VERTEX_T*))
+void traverseBreadthFirst(VERTEX_T* pVertex, void (*vFunction)(VERTEX_T*))
 {
+    VERTEX_T * pCurrentVertex = NULL;
+    VERTEX_T * pAdjVertex = NULL;
     queueClear();
     colorAll(WHITE);
-    int adjacentIndex = -1;
-    int i = 0;
-    VERTEX_T * pCurrent = NULL;
-    VERTEX_T * pAdjacent = NULL;
-    enqueue(&vertices[vIndex]);   /* Our queue requires pointers as data */
+    pVertex->color = GRAY;
+    enqueue(pVertex);
     while (queueSize() > 0)
-        {
-        pCurrent = (VERTEX_T*) dequeue();
-        if (pCurrent->color != BLACK)
-           {
-           (*vFunction)(pCurrent);
-            pCurrent->color = BLACK;
-            for (i = 0; i <= lastIndex; i++)
-               {
-           /* if there is an edge from current to this vertex */
-               if ((vertices[i].key != NULL) && (edges[pCurrent->index][i] > 0))
+       {
+       pCurrentVertex = (VERTEX_T*) dequeue();
+       if (pCurrentVertex->color != BLACK)
           {
-          pAdjacent = &vertices[i];
-              if (pAdjacent->color != BLACK)
-                 {
-             enqueue(pAdjacent);
-                 }
-          } /* end if */
-           } /* end for */
+          (*vFunction)(pCurrentVertex);
+          pCurrentVertex->color = BLACK;
+      ADJACENT_T* pAdjacent = pCurrentVertex->adjacentHead;
+      while (pAdjacent != NULL)
+             {
+         pAdjVertex = (VERTEX_T*) pAdjacent->pVertex;
+         if (pAdjVertex ->color != BLACK)
+             {
+         pAdjVertex->color = GRAY;
+         enqueue(pAdjVertex);
+             }
+         pAdjacent = pAdjacent->next;
+             }
       }
        } /* end while queue has data */
 }
 
 
-/* Execute a depth first search from a single vertex,
+/* Execute a breadth first search from a single vertex,
  * calling the function (*vFunction) on the lowest level
  * vertex we visit, and coloring it black.
  * Arguments
- *    vIndex  - Index of the starting vertex
+ *    pVertex    -  starting vertex for traversal
  */
-
-void traverseDepthFirst(int vIndex, void (*vFunction)(VERTEX_T*))
+void traverseDepthFirst(VERTEX_T* pVertex, void (*vFunction)(VERTEX_T*))
 {
-    VERTEX_T * pAdjacent = NULL;
-    int i = 0;
-    for (i = 0; i <= lastIndex; i++)
-        {
-        /* if there is an edge from current to this vertex */
-        if ((vertices[i].key != NULL) && (edges[vIndex][i] > 0))
+    VERTEX_T * pAdjVertex = NULL;
+    ADJACENT_T* pAdjacent = pVertex->adjacentHead;
+    while (pAdjacent != NULL)
        {
-           if (vertices[i].color == WHITE)
-           {
-           vertices[i].color = GRAY;
-               traverseDepthFirst(i,vFunction);
-               }
-       } /* end if this index is adjacent to vertex at vIndex*/
-    } /* end looking at the adjacents */
-    (*vFunction)(&vertices[vIndex]);
-    vertices[vIndex].color = BLACK;
+       pAdjVertex = (VERTEX_T*) pAdjacent->pVertex;
+       if (pAdjVertex->color == WHITE)
+       {
+       pAdjVertex->color = GRAY;
+           traverseDepthFirst(pAdjVertex,vFunction);
+           }
+       pAdjacent = pAdjacent->next;
+       } /* end while queue has data */
+    /* when we return from the bottom, call the
+     * function and color this node black.
+     */
+    (*vFunction)(pVertex);
+    pVertex->color = BLACK;
 }
 
 
@@ -206,7 +311,7 @@ void traverseDepthFirst(int vIndex, void (*vFunction)(VERTEX_T*))
 void printVertexInfo(VERTEX_T* pVertex)
 {
     printf("== Vertex key |%s| - data |%s|\n",
-       pVertex->key, pVertex->data);
+       pVertex->key, (char*) pVertex->data);
 }
 
 
@@ -216,65 +321,85 @@ void printVertexInfo(VERTEX_T* pVertex)
 
 /* Initialize or reintialize the graph.
  * Argument
- *    max          - how many vertices can this graph
+ *    maxVertices  - how many vertices can this graph
  *                   handle.
  *    bDirected    - If true this is a directed graph.
  *                   Otherwise undirected.
  * Returns 1 unless there is a memory allocation error,
  * in which case it returns zero.
  */
-int initGraph(int max, int bDirected)
+int initGraph(int maxVertices, int bDirected)
 {
-    int returnval = 1;
+    /* for a linked list graph, we call
+     * clearGraph and then initialize bGraphDirected
+     */
     clearGraph();
     bGraphDirected = bDirected;
-    maxVertices = max;
-    /* do the memory allocation */
-    vertices = (VERTEX_T*) calloc(maxVertices,sizeof(VERTEX_T));
-    if (vertices != NULL)
-         {
-     int i = 0;
-         /* allocate an array of rows */
-     edges = (int **) calloc(max,sizeof(int*));
-         if (edges == NULL)
-         returnval = 0;
-         for (i=0; (i < max) && (returnval); i++)
-             {
-         /* allocate each row */
-         edges[i] = (int*) calloc(max,sizeof(int));
-         if (edges[i] == NULL)
-             returnval = 0;
-             /* if any allocation fails, we'll stop the loop */
-             }
-     }
-    else
-         {
-     returnval = 0;
-         }
-    return returnval;
+    maxGraphVertices = maxVertices;
+    return 1;  /* this implementation of initGraph can never fail */
 }
 
+/*****************  New Functions needed for networkWriter *****/
+/* Return the max number of vertices
+ */
+int getMaxVertices()
+{
+    return maxGraphVertices;
+}
+
+/* Return the "directed" flag
+ */
+int isDirected()
+{
+    return bGraphDirected;
+}
+
+/* Reset the current vertex list pointer to the head
+ * of the list. Used for iterating through the vertices
+ * in order to get their keys for the networkWriter module.
+ */
+void resetVertexList()
+{
+    currentVertex = vListHead;
+}
+
+/* Get the key of the current vertex, then
+ * move the current pointer to the next vertex in the list.
+ *   returns key of the current vertex or NULL if we are at
+ *       the end of the list
+ */
+char * getNextVertex()
+{
+     
+    char* key = NULL;
+    if (currentVertex != NULL)
+       {
+       key = currentVertex->key;
+       currentVertex = currentVertex->next;
+       }
+    return key;
+}
+ 
 
 /* Free all memory associated with the graph and
  * reset all parameters.
  */
 void clearGraph()
 {
-    int i;
-    for (i = 0; i < maxVertices; i++)
+    VERTEX_T * pCurVertex = vListHead;
+    while (pCurVertex != NULL)
        {
-       if (vertices[i].key != NULL)
-      free(vertices[i].key);  /* because it was strduped */
-       free(edges[i]);
+       freeAdjacencyList(pCurVertex);
+       VERTEX_T * pDelVtx = pCurVertex;
+       pCurVertex = pCurVertex->next;
+       free(pDelVtx->key);
+       free(pDelVtx);
        }
-    free(vertices);
-    vertices = NULL;
-    free(edges);
-    edges = NULL;
+
+    vListHead = NULL;
+    vListTail = NULL;
     bGraphDirected = 0;
-    maxVertices = 0;
-    lastIndex = -1;
-    vertexCount = 0;
+
 }
 
 /* Add a vertex into the graph.
@@ -292,34 +417,37 @@ void clearGraph()
  */
 int addVertex(char* key, void* pData)
 {
-    int retval = 1;
-    int location  = findVertexByKey(key);
-    if (location >=0)  /* key is already in the graph */
+    int bOk = 1;
+    VERTEX_T * pPred;
+    VERTEX_T * pFound = findVertexByKey(key, &pPred);
+    if (pFound != NULL)  /* key is already in the graph */
        {
-       retval = -1;
+       bOk = -1;
        }
     else
        {
+       VERTEX_T * pNewVtx = (VERTEX_T *) calloc(1,sizeof(VERTEX_T));
        char * pKeyval = strdup(key);
-           if (pKeyval == NULL)
+       if ((pNewVtx == NULL) || (pKeyval == NULL))
           {
-      retval = 0;  /* allocation error */
+      bOk = 0;  /* allocation error */
       }
        else
           {
-      int newloc = findFirstUnused();
-          if (newloc < 0)
-         retval = 0;  /* graph is full */
+      pNewVtx->key = pKeyval;
+          pNewVtx->data = pData;
+      if (vListHead == NULL)  /* first vertex */
+         {
+         vListHead = pNewVtx;
+         }
       else
          {
-         vertices[newloc].key = pKeyval;
-         vertices[newloc].data = pData;
-             vertices[newloc].index = newloc;
-         vertexCount++;
+         vListTail->next = pNewVtx;
          }
+      vListTail = pNewVtx;
       }
        }
-    return retval;
+    return bOk;
 }
 
 
@@ -333,27 +461,26 @@ int addVertex(char* key, void* pData)
  */
 void* removeVertex(char* key)
 {
-   int i;
    void * pData = NULL; /* data to return */
-   int idx = findVertexByKey(key);
-   if (idx >= 0)
+   VERTEX_T * pPredVtx = NULL;
+   VERTEX_T * pRemoveVtx = findVertexByKey(key,&pPredVtx);
+   if (pRemoveVtx != NULL)
       {
-      free(vertices[idx].key);
-      vertices[idx].key = NULL;
-      pData = vertices[idx].data;
-      vertices[idx].data = NULL;
-      vertices[idx].index = -1;
-      vertexCount--;
-      if (idx == lastIndex)
-     lastIndex--;
-      /* now remove any edges where this vertex
-         is either the start or the end vertex
-       */
-      for (i=0; i < maxVertices; i++)
-      {
-      edges[idx][i] = 0;
-          edges[i][idx] = 0;
-          }
+      removeReferences(pRemoveVtx);
+      freeAdjacencyList(pRemoveVtx);
+      if (pPredVtx != NULL)
+         {
+     pPredVtx->next = pRemoveVtx->next;
+         }
+      else /* if there is no predecessor that means this was the head */
+         {
+         vListHead = pRemoveVtx->next;
+         }
+      if (pRemoveVtx == vListTail)
+     vListTail = pPredVtx;
+      free(pRemoveVtx->key);
+      pData = pRemoveVtx->data;
+      free(pRemoveVtx);
       }
    return pData;
 }
@@ -363,32 +490,72 @@ void* removeVertex(char* key)
  * Arguments
  *    key1  -  Key for the first vertex in the edge
  *    key2  -  Key for the second vertex
+ *    weight - weight for this edge
  * Returns 1 if successful, 0 if failed due to
  * memory allocation error, or if either vertex
  * is not found. Returns -1 if an edge already
  * exists in this direction.
  */
-int addEdge(char* key1, char* key2,unsigned int weight)
+int addEdge(char* key1, char* key2, unsigned int weight)
 {
-    int retval = 1;
-    int fromidx = findVertexByKey(key1);
-    int toidx = findVertexByKey(key2);
-    if ((fromidx <0) || (toidx < 0))
+    int bOk = 1;
+    VERTEX_T * pDummy = NULL;
+    VERTEX_T * pFromVtx = findVertexByKey(key1,&pDummy);
+    VERTEX_T * pToVtx = findVertexByKey(key2,&pDummy);
+    if ((pFromVtx == NULL) || (pToVtx == NULL))
        {
-       retval = 0;
+       bOk = 0;
        }
-    else if (edges[fromidx][toidx] != 0)
+    else if (edgeExists(pFromVtx,pToVtx))
        {
-       retval = -1;
+       bOk = -1;
        }
     else
        {
-       edges[fromidx][toidx] = weight;
-       /* If undirected, add an edge in the other direction */
-       if ((retval) && (!bGraphDirected))
-           edges[toidx][fromidx] = weight;
+       ADJACENT_T * pNewRef = (ADJACENT_T*) calloc(1,sizeof(ADJACENT_T));
+       if (pNewRef == NULL)
+          {
+      bOk = 0;
+          }
+       else
+          {
+      pNewRef->pVertex = pToVtx;
+          pNewRef->weight = weight;
+      if (pFromVtx->adjacentTail != NULL)
+              {
+          pFromVtx->adjacentTail->next = pNewRef;
+          }
+          else
+          {
+          pFromVtx->adjacentHead = pNewRef;
+          }
+      pFromVtx->adjacentTail = pNewRef;
+          }
        }
-    return retval;
+    /* If undirected, add an edge in the other direction */
+    if ((bOk) && (!bGraphDirected))
+       {
+       ADJACENT_T * pNewRef2 = (ADJACENT_T*) calloc(1,sizeof(ADJACENT_T));
+       if (pNewRef2 == NULL)
+          {
+      bOk = 0;
+          }
+       else
+          {
+      pNewRef2->pVertex = pFromVtx;
+          pNewRef2->weight = weight;
+      if (pToVtx->adjacentTail != NULL)
+              {
+          pToVtx->adjacentTail->next = pNewRef2;
+          }
+          else
+          {
+          pToVtx->adjacentHead = pNewRef2;
+          }
+      pToVtx->adjacentTail = pNewRef2;
+          }
+       }
+    return bOk;
 }
 
 
@@ -403,25 +570,78 @@ int addEdge(char* key1, char* key2,unsigned int weight)
 int removeEdge(char* key1, char* key2)
 {
    int bOk = 1;
-   int fromidx = findVertexByKey(key1);
-   int toidx = findVertexByKey(key2);
-   if ((fromidx < 0) || (toidx < 0))
+   VERTEX_T * pDummy = NULL;
+   VERTEX_T * pFromVtx = findVertexByKey(key1,&pDummy);
+   VERTEX_T * pToVtx = findVertexByKey(key2,&pDummy);
+   if ((pFromVtx == NULL) || (pToVtx == NULL))
        {
        bOk = 0;
        }
-   else if (edges[fromidx][toidx] == 0) /* no edge to remove */
+   else if (!edgeExists(pFromVtx,pToVtx))
        {
        bOk = 0;
        }
    else
        {
-       edges[fromidx][toidx] = 0;
+       ADJACENT_T* pAdjacent = pFromVtx->adjacentHead;
+       ADJACENT_T* pPrevAdjacent = NULL;
+       while (pAdjacent != NULL)
+          {
+      if (pAdjacent->pVertex == pToVtx)  /* if this edge involves the target*/
+         {
+         if (pPrevAdjacent != NULL)
+            {
+            pPrevAdjacent->next = pAdjacent->next;
+        }
+             else
+            {
+        pFromVtx->adjacentHead = pAdjacent->next;
+            }
+             if (pAdjacent == pFromVtx->adjacentTail)
+            {
+        pFromVtx->adjacentTail = NULL;
+        }
+         free(pAdjacent);
+         break;    /* can only show up once in the adjacency list*/
+         }
+      else
+         {
+         pPrevAdjacent = pAdjacent;
+         pAdjacent = pAdjacent->next;
+         }
+      }
        /* If undirected, remove edge in the other direction */
-       if (!bGraphDirected)
-           edges[toidx][fromidx] = 0;
- 
+       if ((bOk) && (!bGraphDirected))
+          {
+          ADJACENT_T* pAdjacent2 = pToVtx->adjacentHead;
+          ADJACENT_T* pPrevAdjacent2 = NULL;
+      while (pAdjacent2 != NULL)
+             {
+         if (pAdjacent2->pVertex == pFromVtx)
+            {
+            if (pPrevAdjacent2 != NULL)
+               {
+               pPrevAdjacent2->next = pAdjacent2->next;
+           }
+        else
+               {
+           pToVtx->adjacentHead = pAdjacent2->next;
+           }
+        if (pAdjacent2 == pToVtx->adjacentTail)
+               {
+           pToVtx->adjacentTail = NULL;
+           }
+        free(pAdjacent2);
+        break;    /* can only show up once in the adjacency list*/
+        }
+         else
+            {
+        pPrevAdjacent2 = pAdjacent2;
+        pAdjacent2 = pAdjacent2->next;
+        }
+         }
+      }
        }
-   return bOk;
 }
 
 /* Find a vertex and return its data
@@ -433,12 +653,44 @@ int removeEdge(char* key1, char* key2)
 void* findVertex(char* key)
 {
     void* pData = NULL;
-    int index = findVertexByKey(key);
-    if (index >= 0)
+    VERTEX_T * pDummy = NULL;
+    VERTEX_T * pFoundVtx = findVertexByKey(key,&pDummy);
+    if (pFoundVtx != NULL)
        {
-       pData = vertices[index].data;
+       pData = pFoundVtx->data;
        }
     return pData;
+}
+
+/* Find the edge between two vertices (if any) and return
+ * its weight
+ * Arguments
+ *    key1  -  Key for the first vertex in the edge
+ *    key2  -  Key for the second vertex
+ * Returns weight if successful and edge exists.
+ * Returns -1 if an edge is not found
+ */
+int findEdge(char* key1, char* key2)
+{
+    int weight = -1;
+    int bEdgeExists = 0;
+    VERTEX_T * pDummy = NULL;
+    VERTEX_T * pFrom = findVertexByKey(key1,&pDummy);
+    ADJACENT_T * pCurRef = pFrom->adjacentHead;
+    while ((pCurRef != NULL) && (!bEdgeExists))
+       {
+       VERTEX_T * pFrom = (VERTEX_T*) pCurRef->pVertex;
+       if (strcmp(pFrom->key,key2) == 0)
+          {
+      weight = pCurRef->weight;
+          bEdgeExists = 1;
+          }
+       else
+          {
+      pCurRef = pCurRef->next;
+          }
+       }
+    return weight;
 }
 
 
@@ -454,27 +706,27 @@ void* findVertex(char* key)
  * nodes. Returns number of adjacent vertices in pCount.
  * If pCount holds -1, the vertex does not exist.
  */
-/*char** getAdjacentVertices(char* key, int* pCount)
+char** getAdjacentVertices(char* key, int* pCount)
 {
     char** keyArray = NULL;
-    int foundidx = findVertexByKey(key);
-    if (foundidx >=0)
+    VERTEX_T * pDummy = NULL;
+    VERTEX_T * pFoundVtx = findVertexByKey(key,&pDummy);
+    if (pFoundVtx != NULL)
        {
-       *pCount = countAdjacent(foundidx);
+       *pCount = countAdjacent(pFoundVtx);
        if (*pCount > 0)
           {
-      int dest = 0;
-          int i = 0;
+      int i = 0;
       keyArray = (char**) calloc(*pCount, sizeof(char*));
           if (keyArray != NULL)
          {
-         for (i = 0; i <= lastIndex; i++)
+         ADJACENT_T * pAdjacent = pFoundVtx->adjacentHead;
+         while (pAdjacent != NULL)
             {
-        if ((edges[foundidx][i] > 0) && (vertices[i].key != NULL))
-            {
-            keyArray[dest] = strdup(vertices[i].key);
-            dest += 1;
-            }
+        VERTEX_T* pVertex = (VERTEX_T*) pAdjacent->pVertex;
+        keyArray[i] = strdup(pVertex->key);
+        pAdjacent = pAdjacent->next;
+        i += 1;
             }
          }
           }
@@ -484,7 +736,7 @@ void* findVertex(char* key)
        *pCount = -1;
        }
     return keyArray;
-} */
+}
 
 
 /* Print out all the nodes reachable from a node by a
@@ -496,154 +748,131 @@ void* findVertex(char* key)
 int printBreadthFirst(char* startKey)
 {
    int retval = 1;
-   if (vertexCount == 0)
+   VERTEX_T * pDummy = NULL;
+   VERTEX_T * pVertex = findVertexByKey(startKey,&pDummy);
+   if (pVertex == NULL)
       {
-      printf("The graph is empty\n");
-      }
-   int foundidx = findVertexByKey(startKey);
-   if (foundidx < 0)
-      {
-      printf("Vertex |%s| does not exist\n", startKey);
       retval = -1;
       }
    else
       {
-      traverseBreadthFirst(foundidx,&printVertexInfo);
+      traverseBreadthFirst(pVertex,&printVertexInfo);
       }
    return retval;
 }
 
 /* Print out all the nodes by a depth-first search.
  */
-/*void printDepthFirst()
+void printDepthFirst()
 {
-   if (vertexCount == 0)
+   VERTEX_T* pVertex = vListHead;
+   if (pVertex == NULL)
       {
       printf("The graph is empty\n");
       }
    else
       {
-      int i = 0;
       colorAll(WHITE);
-      for (i = 0; i <= lastIndex; i++)
+      while (pVertex != NULL)
          {
-     if ((vertices[i].key != NULL) &&
-         (vertices[i].color == WHITE))
+     if (pVertex->color == WHITE)
         {
         printf("\nStarting new traversal from |%s|\n",
-                   vertices[i].key);
-        vertices[i].color = GRAY;
-            traverseDepthFirst(i,&printVertexInfo);
+                   pVertex->key);
+        pVertex->color = GRAY;
+            traverseDepthFirst(pVertex,&printVertexInfo);
         }
+         pVertex = pVertex->next;
      }
       }
-}*/
-
-/**/
-
-/* No-op function allows us to traverse without
- * doing anything other than setting colors
- * Argument
- *   pVertex   -   vertex - will be ignored
- */
-void emptyFunction(VERTEX_T* pVertex)
-{
 }
 
 
-/* Return information as to whether two vertices are
- * connected by a path.
+
+/* Print out the lowest weight path from one vertex to
+ * another through the network using Dijkstra's
+ * algorithm.
  * Arguments
- *    key1 -  Key for the start vertex
- *    key2 -  Key for the second vertex to check
- * Returns 1 if the two vertices are connected, 0 if they
- * are not. Returns -1 if either vertex does not exist.
+ *    startKey    -  Key of start vertex
+ *    endKey      -  Key of ending vertex
+ * Returns the sum of the weights along the path.
+ * Returns -1 if either key is invalid. Returns -2
+ * if network is not directed.
  */
-int isReachable(char* key1, char* key2)
+int printShortestPath(char* startKey, char* endKey);
+
+
+/* Comparison function to send to the minPriorityQueue
+ * Arguments
+ *   pV1     First vertex (will be cast to VERTEX_T *)
+ *   pV2     Second vertex (will be cast to VERTEX_T *)
+ * Compares dValues. Returns -1 if V1 < V2, 0 if dValues are
+ * the same, 1 if V1 > V2.
+ */
+int compareVertices(void * pV1, void * pV2)
 {
-   int retval = 1;
-   int startindex = findVertexByKey(key1);
-   int endindex = findVertexByKey(key2);
-   if ((startindex < 0) || (endindex < 0))
-      {
-      retval = -1;
-      }
+   VERTEX_T * pVertex1 = (VERTEX_T*) pV1;
+   VERTEX_T * pVertex2 = (VERTEX_T*) pV2;
+   if (pVertex1->dValue < pVertex2->dValue)
+      return -1;
+   else if (pVertex1->dValue > pVertex2->dValue)
+      return 1;
    else
-      {
-      traverseBreadthFirst(startindex,&emptyFunction);
-      /* if after a breadth first traversal, we didn't reach the
-       * the end vertex, it is not reachable.
-       */
-      if (vertices[endindex].color != BLACK)
-          retval = 0;
-
-      }
-   return retval;
-
+     return 0;
 }
 
-/* Return information as to whether two vertices are
- * connected by a path. Also print the path if it
- * exists. We do this by keeping track of source vertices
- * as we do the breadth first traversal.
+/* Print out the minimum spanning tree with total
+ * weight, using Prim's algorithm.
  * Arguments
- *    key1 -  Key for the start vertex
- *    key2 -  Key for the second vertex to check
- * Returns 1 if the two vertices are connected, 0 if they
- * are not. Returns -1 if either vertex does not exist.
+ *    startKey    -  Key of start vertex
+ * Returns the sum of the weights along all edges in
+ * the network. Returns -1 if start key is invalid.
+ * Returns -2 if network is directed
  */
-int isReachablePrintPath(char* key1, char* key2)
+int printMinSpanningTreePrim(char* startKey)
 {
-   printf("Path printing not implemented!\n");
-   return isReachable(key1,key2);
+    int sumWeight = 0;
+    VERTEX_T * pDummy = NULL;
+    VERTEX_T * pStartVertex = findVertexByKey(startKey,&pDummy);
+    VERTEX_T * pMinVertex = NULL;
+    if (pStartVertex == NULL)
+       return -1;
+    if (bGraphDirected)
+       return -2;
+    /* Return immediately if we have error conditions. Otherwise
+     * initialize the queue.
+     */
+    queueMinInit(&compareVertices);
+    colorAll(WHITE);
+    initAll();
+    pStartVertex->dValue = 0;
+    while (queueMinSize() > 0)
+      {
+      pMinVertex = (VERTEX_T*) dequeueMin();
+      pMinVertex->color = BLACK;
+      sumWeight += pMinVertex->dValue;
+      printf("Adding vertex |%s| to min spanning tree ",pMinVertex->key);
+      if (pMinVertex->parent != NULL)
+        printf("as child of |%s|\n",pMinVertex->parent->key);
+      else
+        printf("as root\n");
+      ADJACENT_T * pAdjacent = pMinVertex->adjacentHead;
+      while (pAdjacent != NULL)
+     {
+     VERTEX_T* pAdj = pAdjacent->pVertex;
+         /* if this adjacent vertex has not yet been added to the tree
+          * and if the weight on this edge is less than the current dValue
+          * for this vertex, adjust the dValue and set the parent.
+          */
+         if ((pAdj->color == WHITE) && (pAdjacent->weight < pAdj->dValue))
+        {
+        pAdj->dValue = pAdjacent->weight;
+            pAdj->parent = pMinVertex;
+        }
+         pAdjacent = pAdjacent->next;
+     }
+      }
+    return sumWeight;
 }
-
  
-void createNetwork()
-{
-    char inputLine[32];
-    char key1[32];
-    char key2[32];
-    char data[32];
-    char startIndex[32],endIndex[32];
-    int timeWeight = 0;
-    int count = 0;
-    int max;
-    FILE * pLocation = NULL;
-    FILE * pAirlineMap = NULL;
-    
-    
-    pLocation = fopen("loction.txt","r");
-    
-    if (pLocation == NULL)
-    {
-        printf("Can't open loction.txt\n");
-        exit(0);
-    }
-    fgets(inputLine,sizeof(inputLine),pLocation);
-    sscanf(inputLine,"%d",&max);
-    
-    initGraph(max,0);
-    
-    while (fgets(inputLine,sizeof(inputLine),pLocation) != NULL)
-    {
-        sscanf(inputLine,"%s %s",key1,data);
-        addVertex(key1,data);
-    }
-    
-    fclose(pLocation);
-    pAirlineMap = fopen("airlineMap.txt","r");
-    
-    if (pAirlineMap == NULL)
-    {
-        printf("Can't open airlineMap.txt\n");
-        exit(1);
-    }
-    
-    while (fgets(inputLine,sizeof(inputLine),pAirlineMap) != NULL)
-    {
-        sscanf(inputLine,"%s %s %d",key1,key2,&timeWeight);
-        addEdge(key1,key2,timeWeight);
-    }
-    
-}
+
