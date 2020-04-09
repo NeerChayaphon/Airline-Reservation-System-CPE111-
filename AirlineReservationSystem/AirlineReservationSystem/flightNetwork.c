@@ -33,6 +33,20 @@
 
 char* colorName[] = {"WHITE", "GRAY", "BLACK"};
 
+
+typedef struct _flight
+{
+    char departure[32];
+    char arrival[32];
+    char flightID[32];
+    char departureTime[32];
+    char arrivalTime[32];
+    char airport1[32];
+    char airport2[32];
+
+    struct _flight * pNext;
+    
+} FLIGHT_T;
 /* List items for the adjacency list.
  * Each one is a reference to an existing vertex
  */
@@ -43,6 +57,9 @@ typedef struct _adjacent
                                */
     unsigned int weight;      /* weight of this edge */
     struct _adjacent * next;  /* next item in the ajacency list */
+    FLIGHT_T * flightHead;
+    FLIGHT_T * flightTail;
+    
 } ADJACENT_T;
 
 /* List items for the main vertex list.*/
@@ -61,7 +78,6 @@ typedef struct _vertex
                    * adjacent vertices list
                                */
 }  VERTEX_T;
-
 
 VERTEX_T * vListHead = NULL;  /* head of the vertex list */
 VERTEX_T * vListTail = NULL;  /* tail of the vertex list */
@@ -485,6 +501,55 @@ void* removeVertex(char* key)
    return pData;
 }
 
+void findFlight(char* key1,char* key2,ADJACENT_T * pNewRef)
+{
+    char inputline[32];
+    FLIGHT_T * pFlight = NULL;
+    FILE * pIn = NULL;
+    char departure[32];
+    char arrival[32];
+    char flightID[32];
+    char departureTime[32];
+    char arrivalTime[32];
+    char airport1[32];
+    char airport2[32];
+    
+    pIn = fopen("flight.txt", "r");
+    
+    if (pIn == NULL)
+    {
+        printf("can't open flight.txt file\n");
+        exit(0);
+    }
+    
+    while (fgets(inputline,sizeof(inputline),pIn) != NULL)
+    {
+        sscanf(inputline,"%s %s %s %s %s %s %s",departure,arrival,flightID,departureTime,arrivalTime,airport1,airport2);
+        if ((strcmp(key1,departure) == 0) && (strcmp(key2,arrival) == 0))
+        {
+            pFlight = (FLIGHT_T*) calloc(1,sizeof(FLIGHT_T));
+            strcpy(pFlight->departure,departure);
+            strcpy(pFlight->arrival,arrival);
+            strcpy(pFlight->flightID,flightID);
+            strcpy(pFlight->departureTime,departureTime);
+            strcpy(pFlight->arrivalTime,arrivalTime);
+            strcpy(pFlight->airport1,airport1);
+            strcpy(pFlight->airport2,airport2);
+            
+            if (pNewRef->flightHead == NULL)
+            {
+                pNewRef->flightHead = pFlight;
+            }
+            else
+            {
+                pNewRef->flightTail->pNext = pFlight;
+            }
+            pNewRef->flightTail = pFlight;
+        }
+    }
+    fclose(pIn);
+    
+}
 
 /* Add an edge between two vertices
  * Arguments
@@ -521,6 +586,14 @@ int addEdge(char* key1, char* key2, unsigned int weight)
           {
       pNewRef->pVertex = pToVtx;
           pNewRef->weight = weight;
+              findFlight(key1,key2,pNewRef);
+              FLIGHT_T * pCurrent = pNewRef->flightHead;
+              while (pCurrent != NULL)
+              {
+                  printf("%s -> %s : %s\n",key1,key2,pCurrent->flightID);
+                  pCurrent = pCurrent->pNext;
+              }
+              printf("\n");
       if (pFromVtx->adjacentTail != NULL)
               {
           pFromVtx->adjacentTail->next = pNewRef;
@@ -544,6 +617,14 @@ int addEdge(char* key1, char* key2, unsigned int weight)
           {
       pNewRef2->pVertex = pFromVtx;
           pNewRef2->weight = weight;
+              findFlight(key2,key1,pNewRef2);
+              FLIGHT_T * pCurrent = pNewRef2->flightHead;
+              while (pCurrent != NULL)
+              {
+                  printf("%s -> %s : %s\n",key2,key1,pCurrent->flightID);
+                  pCurrent = pCurrent->pNext;
+              }
+              
       if (pToVtx->adjacentTail != NULL)
               {
           pToVtx->adjacentTail->next = pNewRef2;
@@ -642,6 +723,7 @@ int removeEdge(char* key1, char* key2)
          }
       }
        }
+    return bOk;
 }
 
 /* Find a vertex and return its data
@@ -788,20 +870,6 @@ void printDepthFirst()
 }
 
 
-
-/* Print out the lowest weight path from one vertex to
- * another through the network using Dijkstra's
- * algorithm.
- * Arguments
- *    startKey    -  Key of start vertex
- *    endKey      -  Key of ending vertex
- * Returns the sum of the weights along the path.
- * Returns -1 if either key is invalid. Returns -2
- * if network is not directed.
- */
-int printShortestPath(char* startKey, char* endKey);
-
-
 /* Comparison function to send to the minPriorityQueue
  * Arguments
  *   pV1     First vertex (will be cast to VERTEX_T *)
@@ -820,6 +888,91 @@ int compareVertices(void * pV1, void * pV2)
    else
      return 0;
 }
+
+void printPath(VERTEX_T* pEndVertex)
+{
+    VERTEX_T** pathVertices = calloc(maxGraphVertices,sizeof(VERTEX_T*));
+    /* this array is big enough to hold all the vertices we have */
+    int pathCount = 0;
+    if (pathVertices == NULL)
+       {
+       printf("Allocation error in printPath!\n");
+       }
+    else
+       {
+       int i = 0;
+       VERTEX_T * pCurrent = pEndVertex;
+       while (pCurrent != NULL)  /* traverse the parent links */
+      {
+      pathVertices[pathCount] = pCurrent;
+          pathCount++;
+          pCurrent = pCurrent->parent;
+          }
+       /* Now start at the end of the array to print the path */
+       for (i = pathCount-1; i >= 0; i--)
+      {
+      printf(" %s ",pathVertices[i]->key);
+          if (i > 0)
+         printf("==>");
+          }
+       printf("\n");
+       free(pathVertices);
+       }
+}
+
+/* Print out the lowest weight path from one vertex to
+ * another through the network using Dijkstra's
+ * algorithm.
+ * Arguments
+ *    startKey    -  Key of start vertex
+ *    endKey      -  Key of ending vertex
+ * Returns the sum of the weights along the path.
+ * Returns -1 if either key is invalid. Returns -2
+ * if network is not directed.
+ */
+int printShortestPath(char* startKey, char* endKey)
+{
+    int pathWeight = 0;
+    VERTEX_T * pDummy = NULL;
+    VERTEX_T * pStartVertex = findVertexByKey(startKey,&pDummy);
+    VERTEX_T * pEndVertex = findVertexByKey(endKey,&pDummy);
+    VERTEX_T * pMinVertex = NULL;
+    VERTEX_T * pCurrentVertex = NULL;
+    if ((pStartVertex == NULL) || (pEndVertex == NULL))
+        {
+        return -1;
+        }
+    queueMinInit(&compareVertices);
+    colorAll(WHITE);
+    initAll();
+    pStartVertex->dValue = 0;
+    while (queueMinSize() > 0)
+      {
+      pMinVertex = (VERTEX_T*) dequeueMin();
+      pMinVertex->color = BLACK;
+      ADJACENT_T * pAdjacentEdge = pMinVertex->adjacentHead;
+      while (pAdjacentEdge != NULL)
+      {
+     VERTEX_T* pAdj = pAdjacentEdge->pVertex;
+         /* if this adjacent vertex has not yet been added to the tree
+          * and if this path is shorter than any previous path stored
+          * in the adjacent vertex, adjust the dValue and set the parent.
+          */
+         int distance = pMinVertex->dValue + pAdjacentEdge->weight;
+         if ((pAdj->color == WHITE) && (distance < pAdj->dValue))
+        {
+        pAdj->dValue = distance;
+            pAdj->parent = pMinVertex;
+        }
+         pAdjacentEdge = pAdjacentEdge->next;
+        }
+      }
+    
+      printf("Minimum weight path from %s to %s:\n",startKey,endKey);
+      printPath(pEndVertex);
+    return pathWeight;
+}
+
 
 /* Print out the minimum spanning tree with total
  * weight, using Prim's algorithm.

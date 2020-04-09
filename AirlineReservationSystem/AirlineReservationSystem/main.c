@@ -13,4 +13,5 @@
 int main(int argc, const char * argv[])
 {
     readNetworkDefinition("flightInput.txt",1);
+    printShortestPath("A","D");
 }
