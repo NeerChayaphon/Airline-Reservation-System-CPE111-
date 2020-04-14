@@ -11,6 +11,6 @@
 
 #include <stdio.h>
 
-void buildNetwork();
+void testExample();
 
 #endif /* flightNetwork_h */
