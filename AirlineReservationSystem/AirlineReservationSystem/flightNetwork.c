@@ -25,6 +25,7 @@
 #include "abstractNetwork.h"
 #include "abstractQueue.h"
 #include "minPriorityQueue.h"
+#include <math.h>
 
 #define WHITE 0
 #define GRAY 1
@@ -46,8 +47,10 @@ typedef struct _flight
     char departure[32];
     char arrival[32];
     char flightID[32];
-    char departureTime[32];
-    char arrivalTime[32];
+    char departureHour[32];
+    char departureMinute[32];
+    char arrivalHour[32];
+    char arrivalMinute[32];
     char airport1[32];
     char airport2[32];
 
@@ -522,11 +525,13 @@ void findFlight(char *key1, char *key2, ADJACENT_T *pNewRef)
     char departure[32];
     char arrival[32];
     char flightID[32];
-    char departureTime[32];
-    char arrivalTime[32];
+    char departureHour[32];
+    char departureMinute[32];
+    char arrivalHour[32];
+    char arrivalMinute[32];
     char airport1[32];
     char airport2[32];
-
+    
     pIn = fopen("flight.txt", "r");
 
     if (pIn == NULL)
@@ -537,15 +542,17 @@ void findFlight(char *key1, char *key2, ADJACENT_T *pNewRef)
 
     while (fgets(inputline, sizeof(inputline), pIn) != NULL)
     {
-        sscanf(inputline, "%s %s %s %s %s %s %s", departure, arrival, flightID, departureTime, arrivalTime, airport1, airport2);
+        sscanf(inputline, "%s %s %s %s %s %s %s %s %s", departure, arrival, flightID, departureHour, departureMinute, arrivalHour, arrivalMinute, airport1, airport2);
         if ((strcmp(key1, departure) == 0) && (strcmp(key2, arrival) == 0))
         {
             pFlight = (FLIGHT_T *)calloc(1, sizeof(FLIGHT_T));
             strcpy(pFlight->departure, departure);
             strcpy(pFlight->arrival, arrival);
             strcpy(pFlight->flightID, flightID);
-            strcpy(pFlight->departureTime, departureTime);
-            strcpy(pFlight->arrivalTime, arrivalTime);
+            strcpy(pFlight->departureHour, departureHour);
+            strcpy(pFlight->departureMinute, departureMinute);
+            strcpy(pFlight->arrivalHour, arrivalHour);
+            strcpy(pFlight->arrivalMinute, arrivalMinute);
             strcpy(pFlight->airport1, airport1);
             strcpy(pFlight->airport2, airport2);
 
@@ -559,6 +566,15 @@ void findFlight(char *key1, char *key2, ADJACENT_T *pNewRef)
             }
             pNewRef->flightTail = pFlight;
         }
+        memset(departure,0,sizeof(departure));
+        memset(arrival,0,sizeof(arrival));
+        memset(flightID,0,sizeof(flightID));
+        memset(departureHour,0,sizeof(departureHour));
+        memset(departureMinute,0,sizeof(departureMinute));
+        memset(arrivalHour,0,sizeof(arrivalHour));
+        memset(arrivalMinute,0,sizeof(arrivalMinute));
+        memset(airport1,0,sizeof(airport1));
+        memset(airport2,0,sizeof(airport2));
     }
     fclose(pIn);
 }
@@ -602,7 +618,7 @@ int addEdge(char *key1, char *key2, unsigned int weight)
             FLIGHT_T *pCurrent = pNewRef->flightHead;
             while (pCurrent != NULL)
             {
-                printf("%s -> %s : %s\n", key1, key2, pCurrent->flightID);
+                printf("%s -> %s : %s %s:%s - %s:%s\n", key1, key2, pCurrent->flightID,pCurrent->departureHour,pCurrent->departureMinute,pCurrent->arrivalHour,pCurrent->arrivalMinute);
                 pCurrent = pCurrent->next;
             }
             printf("\n");
@@ -1137,10 +1153,159 @@ int linkFlight(FLIGHT_T *pFirstFlight, FLIGHT_T *pSecondFlight)
             {
                 pFirstFlight->transitHead = pNewRef;
             }
-            pFirstFlight->transitHead = pNewRef;
+            pFirstFlight->transitTail = pNewRef;
         }
     
     return bOk;
+}
+
+
+int timeSubtraction(FLIGHT_T *firstFlight, FLIGHT_T *secondFlight,int *hour,int *minute,int *totalMinute)
+{
+    int check = 0;
+    int departureHour;
+    int departureMinute;
+    int arrivalHour;
+    int arrivalMinute;
+    
+    int subtractHour = 0;
+    int subtractMinute = 0;
+    
+    arrivalHour = atoi(firstFlight->arrivalHour);
+    arrivalMinute = atoi(firstFlight->arrivalMinute);
+    departureHour = atoi(secondFlight->departureHour);
+    departureMinute = atoi(secondFlight->departureMinute);
+    
+    subtractHour = departureHour - arrivalHour;
+    subtractMinute = departureMinute - arrivalMinute;
+    
+    if (subtractMinute < 0)
+    {
+        subtractMinute = subtractMinute + 60;
+        subtractHour = subtractHour - 1;
+    }
+    if (subtractHour < 0)
+    {
+        subtractHour = subtractHour + 24;
+    }
+    
+    *hour = subtractHour;
+    *minute = subtractMinute;
+    *totalMinute = (subtractHour * 60) + subtractMinute;
+    
+    if (*totalMinute >= 120)
+    {
+        check = 1;
+    }
+    return check;
+}
+
+
+void matchFlight(ADJACENT_T *firstEdge, ADJACENT_T *secondEdge)
+{
+    int hour = 0;
+    int minute = 0;
+    int totalMinute = 0;
+    int shortestTime = 0;
+    int check = 0;
+    FLIGHT_T *firstFlight = NULL;
+    FLIGHT_T *secondFlight = NULL;
+    FLIGHT_T *shortTransitFlight = NULL;
+    
+    firstFlight = firstEdge->flightHead;
+    
+    while (firstFlight != NULL)
+    {
+        printf("\t %s\n",firstFlight->flightID);
+        secondFlight = secondEdge->flightHead;
+        while (secondFlight != NULL)
+        {
+            hour = 0;
+            minute = 0;
+            totalMinute = 0;
+            printf("\t %s\n",secondFlight->flightID);
+            check = timeSubtraction(firstFlight,secondFlight,&hour,&minute,&totalMinute);
+            printf("\t%d %d %d\n",hour,minute,totalMinute);
+            if (check == 1)
+            {
+                if (shortestTime == 0)
+                {
+                    shortTransitFlight = secondFlight;
+                    shortestTime = totalMinute;
+                }
+                else if (totalMinute < shortestTime)
+                {
+                    shortTransitFlight = secondFlight;
+                    shortestTime = totalMinute;
+                }
+            }
+            secondFlight = secondFlight->next;
+        }
+        if (check == 1)
+        {
+            linkFlight(firstFlight,shortTransitFlight);
+        }
+        shortestTime = 0;
+        check = 0;
+        firstFlight = firstFlight->next;
+        
+        printf("\n");
+    }
+}
+
+VERTEX_T *findAndReturnVertex(char *key)
+{
+    VERTEX_T *pData = NULL;
+    VERTEX_T *pDummy = NULL;
+    VERTEX_T *pFoundVtx = findVertexByKey(key, &pDummy);
+    if (pFoundVtx != NULL)
+    {
+        pData = pFoundVtx;
+    }
+    return pData;
+}
+
+
+void findFlightConnection()
+{
+    VERTEX_T *currentNode = NULL;
+    VERTEX_T *firstNode = NULL;
+    VERTEX_T *secondNode = NULL;
+    VERTEX_T *thirdNode = NULL;
+    
+    ADJACENT_T *adjCurrent = NULL;
+    ADJACENT_T *adjCurrent2 = NULL;
+    
+    currentNode = vListHead;
+    
+    while (currentNode != NULL)
+    {
+        printf("|%s|\n\n",currentNode->key);
+        firstNode = findAndReturnVertex(currentNode->key);
+        adjCurrent = firstNode->adjacentHead;
+        
+        while (adjCurrent != NULL)
+        {
+            secondNode = adjCurrent->pVertex;
+            printf("\t%s\n",secondNode->key);
+            adjCurrent2 = secondNode->adjacentHead;
+            
+            while (adjCurrent2 != NULL)
+            {
+                thirdNode = adjCurrent2->pVertex;
+                printf("\t- %s\n",thirdNode->key);
+                matchFlight(adjCurrent,adjCurrent2);
+                
+                adjCurrent2 = adjCurrent2->next;
+            }
+            
+            adjCurrent = adjCurrent->next;
+        }
+        
+        currentNode = currentNode->next;
+    }
+    
+    
 }
 
 void testExample()
@@ -1148,13 +1313,52 @@ void testExample()
     FLIGHT_T *pFirstFlight = NULL;
     FLIGHT_T *pSecondFLight = NULL;
     FLIGHT_T *pCurrent = NULL;
-    printf("TEST A->B->C\n");
+    TRANSIT *pCurrent2 = NULL;
+    
+    int i = 0;
+    findFlightConnection();
+    printf("TEST A->B->...\n");
     pFirstFlight = findFlightInEdge("A","B");
-    pSecondFLight = findFlightInEdge("B","C");
+    
+    pCurrent = pFirstFlight;
+       while (pCurrent != NULL)
+       {
+           i = 0;
+           pCurrent2 = pCurrent->transitHead;
+           while (pCurrent2 != NULL)
+           {
+               pSecondFLight = pCurrent2->flight;
+               printf("%s %s\n",pCurrent->flightID,pSecondFLight->flightID);
+               printf("Count = %d\n",++i);
+               pCurrent2 = pCurrent2->next;
+           }
+           pCurrent = pCurrent->next;
+       }
+
+
+   /* pSecondFLight = findFlightInEdge("B","D");
     
     linkFlight(pFirstFlight,pSecondFLight);
     
     printf("%s\n",pFirstFlight->flightID);
     pCurrent = pFirstFlight->transitHead->flight;
-    printf("%s\n",pCurrent->flightID);
+    printf("%s\n",pCurrent->flightID);*/
+    
+    /*VERTEX_T *pNode = NULL;
+    VERTEX_T *pNode2 = NULL;
+    ADJACENT_T *pCurrent = NULL;
+    
+    pNode = findVertex2("A");
+    pCurrent = pNode->adjacentHead;
+    
+    while (pCurrent !=NULL)
+    {
+        pNode2 = pCurrent->pVertex;
+        printf("%s\n",pNode2->key);
+        pCurrent = pCurrent->next;
+    }*/
+
+    
+    
+
 }

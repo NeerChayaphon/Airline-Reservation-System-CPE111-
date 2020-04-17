@@ -122,6 +122,7 @@ void processCommand(char* command, int bVerbose, int bDirected)
 {
     char keystring1[64] = "";
     char keystring2[64] = "";
+    char data[64] = "";
     char* newString = NULL;
     char* key = NULL;
     int weight = -1;
@@ -131,7 +132,7 @@ void processCommand(char* command, int bVerbose, int bDirected)
     memset(keystring2,0,sizeof(keystring2));
     if (strncmp(command,"VERTEX",strlen("VERTEX")) == 0)
        {
-       sscanf(command,"VERTEX %s",keystring1);
+       sscanf(command,"VERTEX %s %s",keystring1,data);
        if (strlen(keystring1) == 0) 
 	 {
 	 fprintf(stderr,"Error: Missing key\n  |%s|\n",
@@ -140,12 +141,12 @@ void processCommand(char* command, int bVerbose, int bDirected)
        else
 	 {
          key = strdup(keystring1);
-         newString = strdup(keystring1);  /* use the key as data as well */
+         newString = strdup(data);  /* use the key as data as well */
 	 retval = addVertex(key,newString);
 	 if (retval == 1) 
 	    {
 	    if (bVerbose)
-	       fprintf(stdout,"Vertex |%s| added\n",key);
+	       fprintf(stdout,"Vertex |%s| |%s| added\n",key,newString);
 	    }
 	 else if (retval < 0)
 	    {
